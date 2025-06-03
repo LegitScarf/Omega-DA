@@ -1,10 +1,7 @@
 streamlit
 pandas
-ydata-profiling==4.6.4
-dtale
+ydata-profiling==4.1.0
 numpy
 matplotlib
 seaborn
 plotly
-requests
-tqdm
