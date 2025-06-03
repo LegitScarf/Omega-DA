@@ -1,7 +1,7 @@
 streamlit
 pandas
-ydata-profiling==4.1.0
 numpy
 matplotlib
 seaborn
 plotly
+scipy
