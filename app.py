@@ -13,6 +13,16 @@ from scipy import stats
 import warnings
 warnings.filterwarnings('ignore')
 
+# Additional imports for profiling and D-Tale
+from ydata_profiling import ProfileReport
+import dtale
+import socket
+
+def find_free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('', 0))
+        return s.getsockname()[1]
+
 # Set page configuration
 st.set_page_config(
     page_title="Omega - EDA Tool",
@@ -189,456 +199,22 @@ def load_dataset(uploaded_file):
         return None, str(e)
 
 def generate_omega_report_html(df, filename):
-    """Generate a custom HTML EDA report"""
-    
-    # Basic info
-    n_rows, n_cols = df.shape
-    missing_cells = df.isnull().sum().sum()
-    missing_percent = (missing_cells / (n_rows * n_cols)) * 100
-    duplicate_rows = df.duplicated().sum()
-    memory_usage = df.memory_usage(deep=True).sum() / 1024**2
-    
-    # Data types
-    numeric_cols = list(df.select_dtypes(include=[np.number]).columns)
-    categorical_cols = list(df.select_dtypes(include=['object']).columns)
-    datetime_cols = list(df.select_dtypes(include=['datetime64']).columns)
-    
-    # Generate HTML report
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Omega EDA Report - {filename}</title>
-        <style>
-            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background-color: #f8f9fa; }}
-            .container {{ max-width: 1200px; margin: 0 auto; background-color: white; padding: 40px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }}
-            .header {{ text-align: center; color: #2E86AB; border-bottom: 3px solid #2E86AB; padding-bottom: 20px; margin-bottom: 40px; }}
-            .section {{ margin: 30px 0; }}
-            .section h2 {{ color: #A23B72; border-bottom: 2px solid #A23B72; padding-bottom: 10px; }}
-            .metric-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }}
-            .metric-card {{ background: linear-gradient(135deg, #f0f8ff 0%, #e6f3ff 100%); padding: 20px; border-radius: 10px; text-align: center; border: 2px solid #2E86AB; }}
-            .metric-value {{ font-size: 2em; font-weight: bold; color: #A23B72; }}
-            .metric-label {{ color: #2E86AB; font-weight: 600; }}
-            .table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
-            .table th, .table td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
-            .table th {{ background-color: #2E86AB; color: white; }}
-            .table tr:hover {{ background-color: #f5f5f5; }}
-            .warning {{ background-color: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 8px; }}
-            .success {{ background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 15px; border-radius: 8px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>🔮 OMEGA EDA REPORT</h1>
-                <p>Dataset: {filename}</p>
-                <p>Generated on: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            </div>
-            
-            <div class="section">
-                <h2>📊 Dataset Overview</h2>
-                <div class="metric-grid">
-                    <div class="metric-card">
-                        <div class="metric-value">{n_rows:,}</div>
-                        <div class="metric-label">Rows</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{n_cols}</div>
-                        <div class="metric-label">Columns</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{memory_usage:.1f} MB</div>
-                        <div class="metric-label">Memory Usage</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{missing_percent:.1f}%</div>
-                        <div class="metric-label">Missing Data</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{duplicate_rows:,}</div>
-                        <div class="metric-label">Duplicate Rows</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="section">
-                <h2>🔍 Column Information</h2>
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Column</th>
-                            <th>Data Type</th>
-                            <th>Non-Null Count</th>
-                            <th>Missing Count</th>
-                            <th>Missing %</th>
-                            <th>Unique Values</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-    """
-    
-    # Add column information
-    for col in df.columns:
-        non_null = df[col].count()
-        missing = df[col].isnull().sum()
-        missing_pct = (missing / len(df)) * 100
-        unique_vals = df[col].nunique()
-        dtype = str(df[col].dtype)
-        
-        html_content += f"""
-                        <tr>
-                            <td><strong>{col}</strong></td>
-                            <td>{dtype}</td>
-                            <td>{non_null:,}</td>
-                            <td>{missing:,}</td>
-                            <td>{missing_pct:.1f}%</td>
-                            <td>{unique_vals:,}</td>
-                        </tr>
-        """
-    
-    html_content += """
-                    </tbody>
-                </table>
-            </div>
-    """
-    
-    # Add statistics for numeric columns
-    if numeric_cols:
-        html_content += """
-            <div class="section">
-                <h2>📈 Numeric Columns Statistics</h2>
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Column</th>
-                            <th>Mean</th>
-                            <th>Std</th>
-                            <th>Min</th>
-                            <th>25%</th>
-                            <th>50%</th>
-                            <th>75%</th>
-                            <th>Max</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        """
-        
-        for col in numeric_cols:
-            desc = df[col].describe()
-            html_content += f"""
-                        <tr>
-                            <td><strong>{col}</strong></td>
-                            <td>{desc['mean']:.2f}</td>
-                            <td>{desc['std']:.2f}</td>
-                            <td>{desc['min']:.2f}</td>
-                            <td>{desc['25%']:.2f}</td>
-                            <td>{desc['50%']:.2f}</td>
-                            <td>{desc['75%']:.2f}</td>
-                            <td>{desc['max']:.2f}</td>
-                        </tr>
-            """
-        
-        html_content += """
-                    </tbody>
-                </table>
-            </div>
-        """
-    
-    # Add categorical columns info
-    if categorical_cols:
-        html_content += """
-            <div class="section">
-                <h2>📝 Categorical Columns</h2>
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Column</th>
-                            <th>Unique Values</th>
-                            <th>Most Frequent</th>
-                            <th>Frequency</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        """
-        
-        for col in categorical_cols[:10]:  # Limit to first 10 categorical columns
-            unique_count = df[col].nunique()
-            if unique_count > 0:
-                most_frequent = df[col].value_counts().index[0]
-                frequency = df[col].value_counts().iloc[0]
-                html_content += f"""
-                            <tr>
-                                <td><strong>{col}</strong></td>
-                                <td>{unique_count:,}</td>
-                                <td>{most_frequent}</td>
-                                <td>{frequency:,}</td>
-                            </tr>
-                """
-        
-        html_content += """
-                    </tbody>
-                </table>
-            </div>
-        """
-    
-    # Data quality warnings
-    html_content += """
-            <div class="section">
-                <h2>⚠️ Data Quality Insights</h2>
-    """
-    
-    # Check for issues
-    issues = []
-    if missing_percent > 10:
-        issues.append(f"High missing data: {missing_percent:.1f}% of cells are missing")
-    if duplicate_rows > 0:
-        issues.append(f"Found {duplicate_rows:,} duplicate rows")
-    
-    high_missing_cols = df.columns[df.isnull().sum() / len(df) > 0.5].tolist()
-    if high_missing_cols:
-        issues.append(f"Columns with >50% missing data: {', '.join(high_missing_cols)}")
-    
-    if issues:
-        for issue in issues:
-            html_content += f'<div class="warning">⚠️ {issue}</div>'
-    else:
-        html_content += '<div class="success">✅ No major data quality issues detected!</div>'
-    
-    html_content += """
-            </div>
-            
-            <div class="section">
-                <h2>🎯 Summary</h2>
-                <p>This report was generated by <strong>Omega EDA Tool</strong>, providing comprehensive insights into your dataset.</p>
-                <p><strong>Key Findings:</strong></p>
-                <ul>
-    """
-    
-    # Add key findings
-    html_content += f"<li>Dataset contains {n_rows:,} rows and {n_cols} columns</li>"
-    html_content += f"<li>{len(numeric_cols)} numeric columns and {len(categorical_cols)} categorical columns</li>"
-    html_content += f"<li>Overall data completeness: {100 - missing_percent:.1f}%</li>"
-    
-    if duplicate_rows == 0:
-        html_content += "<li>No duplicate rows found</li>"
-    else:
-        html_content += f"<li>{duplicate_rows:,} duplicate rows detected</li>"
-    
-    html_content += """
-                </ul>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    
+    # ... existing code ...
+    # (Keep your previous implementation of generate_omega_report_html here)
+    # ... existing code ...
+    # (No changes needed)
+    # ... existing code ...
     return html_content
 
 def display_dataset_info(df):
-    """Display basic information about the dataset"""
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{df.shape[0]:,}</div>
-            <div class="stat-label">Rows</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{df.shape[1]}</div>
-            <div class="stat-label">Columns</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        memory_mb = df.memory_usage(deep=True).sum() / 1024**2
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{memory_mb:.1f} MB</div>
-            <div class="stat-label">Memory</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        missing_count = df.isnull().sum().sum()
-        st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-value">{missing_count:,}</div>
-            <div class="stat-label">Missing</div>
-        </div>
-        """, unsafe_allow_html=True)
+    # ... existing code ...
+    # (Keep your previous implementation of display_dataset_info here)
+    # ... existing code ...
 
 def create_visualizations(df):
-    """Create comprehensive visualizations for the dataset"""
-    
-    st.markdown('<h2 class="sub-header">📊 Data Visualizations</h2>', unsafe_allow_html=True)
-    
-    # Data type distribution
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🔢 Data Types Distribution")
-        dtype_counts = df.dtypes.value_counts()
-        fig = px.pie(
-            values=dtype_counts.values, 
-            names=dtype_counts.index.astype(str),
-            title="Distribution of Data Types",
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
-        fig.update_layout(
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font_color='#2E86AB'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("🔍 Missing Values Analysis")
-        missing_data = df.isnull().sum()
-        missing_data = missing_data[missing_data > 0].sort_values(ascending=True)
-        
-        if len(missing_data) > 0:
-            fig = px.bar(
-                x=missing_data.values,
-                y=missing_data.index,
-                orientation='h',
-                title="Missing Values by Column",
-                color=missing_data.values,
-                color_continuous_scale='Reds'
-            )
-            fig.update_layout(
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                font_color='#2E86AB'
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.success("🎉 No missing values found!")
-    
-    # Numeric columns analysis
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    if len(numeric_cols) > 0:
-        st.subheader("📈 Numeric Columns Analysis")
-        
-        # Distribution plots
-        selected_cols = st.multiselect(
-            "Select numeric columns to analyze:",
-            numeric_cols,
-            default=numeric_cols[:3] if len(numeric_cols) >= 3 else numeric_cols
-        )
-        
-        if selected_cols:
-            # Create subplots for distributions
-            n_cols = min(2, len(selected_cols))
-            n_rows = (len(selected_cols) + 1) // 2
-            
-            fig = make_subplots(
-                rows=n_rows, 
-                cols=n_cols,
-                subplot_titles=selected_cols,
-                vertical_spacing=0.1
-            )
-            
-            for i, col in enumerate(selected_cols):
-                row = (i // n_cols) + 1
-                col_pos = (i % n_cols) + 1
-                
-                fig.add_trace(
-                    go.Histogram(x=df[col], name=col, nbinsx=30),
-                    row=row, col=col_pos
-                )
-            
-            fig.update_layout(
-                height=300 * n_rows,
-                title_text="Distribution of Selected Numeric Columns",
-                showlegend=False,
-                plot_bgcolor='white',
-                paper_bgcolor='white'
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Box plots
-            if len(selected_cols) > 1:
-                st.subheader("📦 Box Plots for Outlier Detection")
-                fig = go.Figure()
-                
-                for col in selected_cols:
-                    fig.add_trace(go.Box(y=df[col], name=col))
-                
-                fig.update_layout(
-                    title="Box Plots - Outlier Detection",
-                    plot_bgcolor='white',
-                    paper_bgcolor='white',
-                    font_color='#2E86AB'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-    
-    # Correlation analysis
-    if len(numeric_cols) > 1:
-        st.subheader("🔗 Correlation Analysis")
-        corr_matrix = df[numeric_cols].corr()
-        
-        fig = px.imshow(
-            corr_matrix,
-            text_auto=True,
-            aspect="auto",
-            title="Correlation Matrix",
-            color_continuous_scale='RdYlBu'
-        )
-        fig.update_layout(
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font_color='#2E86AB'
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Categorical columns analysis
-    categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
-    if len(categorical_cols) > 0:
-        st.subheader("📝 Categorical Columns Analysis")
-        
-        selected_cat_col = st.selectbox(
-            "Select a categorical column to analyze:",
-            categorical_cols
-        )
-        
-        if selected_cat_col:
-            # Value counts
-            value_counts = df[selected_cat_col].value_counts().head(10)
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig = px.bar(
-                    x=value_counts.index,
-                    y=value_counts.values,
-                    title=f"Top 10 Values in {selected_cat_col}",
-                    color=value_counts.values,
-                    color_continuous_scale='Blues'
-                )
-                fig.update_layout(
-                    plot_bgcolor='white',
-                    paper_bgcolor='white',
-                    font_color='#2E86AB'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                fig = px.pie(
-                    values=value_counts.values,
-                    names=value_counts.index,
-                    title=f"Distribution of {selected_cat_col}"
-                )
-                fig.update_layout(
-                    plot_bgcolor='white',
-                    paper_bgcolor='white',
-                    font_color='#2E86AB'
-                )
-                st.plotly_chart(fig, use_container_width=True)
+    # ... existing code ...
+    # (Keep your previous implementation of create_visualizations here)
+    # ... existing code ...
 
 def main():
     # Main header with Omega branding
@@ -772,4 +348,44 @@ def main():
                     
                     # Show preview
                     with st.expander("📖 Report Preview", expanded=False):
-                        st.
+                        st.components.v1.html(html_report, height=600, scrolling=True)
+                        
+                except Exception as e:
+                    st.markdown(f'<div class="warning-box">❌ Error generating report: {e}</div>', unsafe_allow_html=True)
+
+        # --- ydata-profiling (ProfileReport) ---
+        st.markdown('<h2 class="sub-header">🧑‍🔬 ydata-profiling Report</h2>', unsafe_allow_html=True)
+        st.markdown('<div class="info-box">Generate a full profiling report using ydata-profiling (pandas-profiling successor).</div>', unsafe_allow_html=True)
+        if st.button("🧑‍🔬 Generate ydata-profiling Report", key="profile_report"):
+            with st.spinner("Generating ydata-profiling report..."):
+                try:
+                    profile = ProfileReport(df, title=f"ydata-profiling Report: {uploaded_file.name}", explorative=True)
+                    profile_html = profile.to_html()
+                    st.markdown('<div class="success-box">✅ ydata-profiling report generated successfully!</div>', unsafe_allow_html=True)
+                    st.download_button(
+                        label="📥 Download ydata-profiling Report (HTML)",
+                        data=profile_html,
+                        file_name=f"profile_report_{uploaded_file.name.replace('.csv', '.html')}",
+                        mime="text/html"
+                    )
+                    with st.expander("📖 ydata-profiling Report Preview", expanded=False):
+                        st.components.v1.html(profile_html, height=600, scrolling=True)
+                except Exception as e:
+                    st.markdown(f'<div class="warning-box">❌ Error generating ydata-profiling report: {e}</div>', unsafe_allow_html=True)
+
+        # --- D-Tale Integration ---
+        st.markdown('<h2 class="sub-header">🧑‍💻 D-Tale Interactive Exploration</h2>', unsafe_allow_html=True)
+        st.markdown('<div class="info-box">Launch D-Tale for interactive DataFrame exploration in a new browser tab.</div>', unsafe_allow_html=True)
+        if st.button("🧑‍💻 Launch D-Tale", key="dtale_launch"):
+            try:
+                port = find_free_port()
+                d = dtale.show(df, port=port, open_browser=False)
+                dtale_url = f"http://localhost:{port}"
+                st.markdown(f'<div class="success-box">✅ D-Tale launched! <a href="{dtale_url}" target="_blank">Open D-Tale in a new tab</a></div>', unsafe_allow_html=True)
+            except Exception as e:
+                st.markdown(f'<div class="warning-box">❌ Error launching D-Tale: {e}</div>', unsafe_allow_html=True)
+    else:
+        st.info("👈 Please upload a CSV file to get started.")
+
+if __name__ == "__main__":
+    main()
