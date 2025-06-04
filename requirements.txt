@@ -6,4 +6,3 @@ seaborn>=0.12.0
 plotly>=5.10.0
 scipy>=1.7.0
 ydata-profiling>=4.0.0
-dtale>=3.6.0
