@@ -1,7 +1,9 @@
-streamlit
-pandas
-numpy
-matplotlib
-seaborn
-plotly
-scipy
+streamlit>=1.25.0
+pandas>=1.5.0
+numpy>=1.21.0
+matplotlib>=3.5.0
+seaborn>=0.12.0
+plotly>=5.10.0
+scipy>=1.7.0
+ydata-profiling>=4.0.0
+dtale>=3.6.0
